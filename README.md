@@ -50,9 +50,16 @@ dsh plugin --profile <profile> add "github:PilotPhil/dsh-flowmeter#<commit-sha>"
 >
 > 锁完整 commit SHA 而不是分支名：以后上游推送不会悄悄改掉你装的东西。
 
-装完重启 DSH。这一步只把包装进 profile；如果重启后在「插件」页看不到 **模型流速**，说明 bundle 选择没自动写入 —— 在「插件」页里把它加入/启用，或打开 profile 的 `package.json`，把 `dsh-flowmeter` 追加到 `dsh.profile.bundles` 数组，再重启一次。
+装完重启 DSH 即可。这条命令会把包装进 profile，并**自动**把 `dsh-flowmeter` 加进该 profile `package.json` 的 `dsh.profile.bundles`（装完的清单长这样）：
 
-如果「插件」页里已经能看到它、但输入框下方没有读数，按一次 F5 刷新页面（客户端模块要重新加载）。
+```json
+{
+  "dependencies": { "dsh-flowmeter": "git+https://github.com/PilotPhil/dsh-flowmeter.git#bce1713" },
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "dsh-flowmeter"] } }
+}
+```
+
+如果「插件」页里已经能看到 **模型流速**、但输入框下方没有读数，按一次 F5 刷新页面（客户端模块要重新加载）。
 
 ### 方式二：本地目录安装
 
