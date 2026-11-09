@@ -1,8 +1,10 @@
 {
   "name": "dsh-flowmeter",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Live model output speed (tok/s), a recent-speed bar chart, and time to first token, shown in the composer footer row.",
   "repository": {
     "type": "git",
