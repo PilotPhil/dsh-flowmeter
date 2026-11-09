@@ -181,9 +181,19 @@ window.__ModuleLoader__.load({
       '.dshfm-quota-seg{display:inline-flex;flex:0 0 auto;gap:1px;margin-left:auto;padding:1px;border:.5px solid var(--dsw-alias-border-l1);border-radius:5px}',
       '.dshfm-quota-segbtn{appearance:none;border:0;border-radius:4px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:10.5px;line-height:15px;padding:0 6px;cursor:pointer}',
       '.dshfm-quota-segbtn[aria-pressed="true"]{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
-      // currentColor 让柱子/曲线统一走卡片强调色。
-      '.dshfm-quota-chart{width:100%;height:20px;min-width:0;display:flex;align-items:flex-end;color:var(--dshfm-accent,var(--dsw-alias-brand-primary,#3d6df6))}',
-      '.dshfm-quota-chart .dshfm-chart{width:100%;height:20px}',
+      // currentColor 让曲线/面积统一走卡片强调色。
+      '.dshfm-quota-chart{width:100%;min-width:0;color:var(--dshfm-accent,var(--dsw-alias-brand-primary,#3d6df6))}',
+      '.dshfm-trend{display:flex;align-items:stretch;gap:5px;width:100%;height:36px;min-width:0}',
+      '.dshfm-trend-axis{position:relative;flex:0 0 auto;width:20px;color:var(--dsw-alias-label-secondary);font-size:9px;line-height:9px;font-variant-numeric:tabular-nums}',
+      '.dshfm-trend-axis>span{position:absolute;right:0;transform:translateY(-50%);white-space:nowrap}',
+      '.dshfm-trend-axis>span:nth-child(1){top:.5px}',
+      '.dshfm-trend-axis>span:nth-child(2){top:50%}',
+      '.dshfm-trend-axis>span:nth-child(3){top:calc(100% - .5px)}',
+      '.dshfm-trend-plot{position:relative;flex:1 1 auto;min-width:0}',
+      '.dshfm-trend-svg{display:block;width:100%;height:100%;overflow:visible}',
+      '.dshfm-trend-grid{stroke:var(--dsw-alias-border-l1);stroke-width:1;vector-effect:non-scaling-stroke}',
+      '.dshfm-trend-area{fill:currentColor;opacity:.12;stroke:none}',
+      '.dshfm-trend-line{fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}',
       // 折叠成 56px 窄栏时只剩一个 36px 的圆：放不下卡片，但读数还在。
       '.dshfm-rail{box-sizing:border-box;flex:none;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--dsw-alias-brand-primary,#3d6df6);font:inherit;font-variant-numeric:tabular-nums;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}',
       '.dshfm-rail:hover{background:var(--dsw-alias-bg-layer-2)}',
@@ -284,6 +294,50 @@ window.__ModuleLoader__.load({
       return (seconds < 10 ? seconds.toFixed(2) : seconds.toFixed(1)) + 's';
     }
 
+    /** Y 轴刻度文字：整数，超过四位数缩成 k，个位数留一位小数。 */
+    function formatAxis(value) {
+      const number = Math.max(0, Number(value) || 0);
+      if (number >= 10000) return Math.round(number / 1000) + 'k';
+      if (number >= 1000) return (number / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+      if (number >= 10) return String(Math.round(number));
+      if (number === 0) return '0';
+      return number.toFixed(1).replace(/\.0$/, '');
+    }
+
+    /** 轴顶取整到一位有效数字（286 → 300，143 → 200），曲线总能顶到接近画布上沿。 */
+    function niceMax(value) {
+      const number = Math.max(1, Number(value) || 0);
+      const power = Math.pow(10, Math.floor(Math.log10(number)));
+      return Math.ceil(number / power) * power;
+    }
+
+    /**
+     * 把一串点连成平滑曲线：Catmull-Rom 转三次贝塞尔，控制点夹在画布内，避免过冲出界。
+     * @param {{ x: number, y: number }[]} points - 从左到右的点。
+     * @param {number} height - 画布高度（用于夹紧控制点）。
+     * @returns {string} SVG 路径。
+     */
+    function smoothPath(points, height) {
+      if (points.length === 0) return '';
+      if (points.length === 1) return 'M' + points[0].x.toFixed(2) + ' ' + points[0].y.toFixed(2);
+      const clampY = (value) => Math.max(0, Math.min(height, value));
+      let d = 'M' + points[0].x.toFixed(2) + ' ' + points[0].y.toFixed(2);
+      for (let index = 0; index < points.length - 1; index += 1) {
+        const p0 = points[index - 1] ?? points[index];
+        const p1 = points[index];
+        const p2 = points[index + 1];
+        const p3 = points[index + 2] ?? p2;
+        const c1x = p1.x + (p2.x - p0.x) / 6;
+        const c1y = clampY(p1.y + (p2.y - p0.y) / 6);
+        const c2x = p2.x - (p3.x - p1.x) / 6;
+        const c2y = clampY(p2.y - (p3.y - p1.y) / 6);
+        d += 'C' + c1x.toFixed(2) + ' ' + c1y.toFixed(2) + ' '
+          + c2x.toFixed(2) + ' ' + c2y.toFixed(2) + ' '
+          + p2.x.toFixed(2) + ' ' + p2.y.toFixed(2);
+      }
+      return d;
+    }
+
     /**
      * 曲线图：同一组分桶连成折线，下面垫一层同色面积，越新越靠右。
      * @param {{ values: number[], peak: number, width?: number, height?: number }} props
@@ -350,6 +404,64 @@ window.__ModuleLoader__.load({
             },
           });
         }),
+      );
+    }
+
+    /**
+     * 侧栏合计卡的图：平滑曲线 + 简单 Y 轴（顶 / 中 / 底三档刻度，配三条水平网格线）。
+     *
+     * 用整宽 SVG 按视口拉伸（preserveAspectRatio="none"），横向正好铺满 24 个桶；
+     * 线宽用 non-scaling-stroke 保持 1.4px，不会被拉细或拉粗。
+     *
+     * @param {{ values: number[], peak: number }} props - 桶速度与归一化峰值。
+     */
+    function SidebarTrend({ values, peak }) {
+      const count = values.length;
+      const width = 240;
+      const height = 36;
+      const top = niceMax(peak);
+      const points = values.map((value, index) => {
+        const ratio = Math.max(0, Math.min(1, Number(value) / top));
+        return {
+          x: count > 1 ? (index * width) / (count - 1) : width / 2,
+          y: height - 0.75 - ratio * (height - 1.5),
+        };
+      });
+      const line = smoothPath(points, height);
+      const area = line === '' ? '' : line + 'L' + width + ' ' + height + 'L0 ' + height + 'Z';
+      const ticks = [top, top / 2, 0];
+      return h(
+        'div',
+        { className: 'dshfm-trend' },
+        h(
+          'div',
+          { className: 'dshfm-trend-axis', 'aria-hidden': true },
+          ticks.map((tick, index) => h('span', { key: index }, formatAxis(tick))),
+        ),
+        h(
+          'div',
+          { className: 'dshfm-trend-plot' },
+          h(
+            'svg',
+            {
+              className: 'dshfm-trend-svg',
+              viewBox: '0 0 ' + width + ' ' + height,
+              preserveAspectRatio: 'none',
+              'aria-hidden': true,
+              focusable: 'false',
+            },
+            ticks.map((tick, index) => h('line', {
+              key: 'grid-' + index,
+              x1: 0,
+              x2: width,
+              y1: index === 0 ? 0.5 : index === 1 ? height / 2 : height - 0.5,
+              y2: index === 0 ? 0.5 : index === 1 ? height / 2 : height - 0.5,
+              className: 'dshfm-trend-grid',
+            })),
+            area === '' ? null : h('path', { d: area, className: 'dshfm-trend-area' }),
+            line === '' ? null : h('path', { d: line, className: 'dshfm-trend-line' }),
+          ),
+        ),
       );
     }
 
@@ -452,7 +564,7 @@ window.__ModuleLoader__.load({
     /**
      * 侧栏底部的全库读数：所有会话的合计（或平均）速度 + 同一套分桶图表。
      *
-     * 宽栏是一张两行的卡：第一行读数与「累加 / 平均」切换，第二行整宽图表；
+     * 宽栏是一张两行的卡：第一行读数与「累加 / 平均」切换，第二行整宽平滑曲线（带简单 Y 轴）；
      * 折叠成 56px 窄栏时只剩一个 36px 的圆，显示数字，点一下切换口径。
      * 卡片 `order` 比 OpenCode Go 那张额度卡更小，因此排在它上面一行。
      *
@@ -531,7 +643,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'dshfm-quota-chart' },
-          h(SpeedChart, { values: bars, peak, kind: display.chart, width: 240, height: 20 }),
+          h(SidebarTrend, { values: bars, peak }),
         ),
       );
     }
