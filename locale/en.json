@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Model flowmeter",
+    "description": "Shows live model output speed (tok/s), a bar chart of the last few seconds, and time to first token under the composer."
+  }
+}

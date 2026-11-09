@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Model flowmeter">
+  <defs>
+    <linearGradient id="flowmeter-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5b8bff"/>
+      <stop offset="1" stop-color="#1e3fb8"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#flowmeter-bg)"/>
+  <g fill="#ffffff">
+    <rect x="14" y="34" width="6" height="12" rx="2" opacity="0.62"/>
+    <rect x="23" y="27" width="6" height="19" rx="2" opacity="0.78"/>
+    <rect x="32" y="19" width="6" height="27" rx="2" opacity="0.92"/>
+    <rect x="41" y="31" width="6" height="15" rx="2" opacity="0.72"/>
+  </g>
+  <circle cx="47" cy="17" r="3.4" fill="#dbe8ff"/>
+</svg>
