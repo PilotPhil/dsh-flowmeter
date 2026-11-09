@@ -20,6 +20,8 @@ window.__ModuleLoader__.load({
     const NS = 'composer.flowmeter';
     /** Host 半暴露的只读读数端点。 */
     const ENDPOINT = '/dsh-flowmeter/state.json';
+    /** 全库读数端点：侧栏底部那枚。 */
+    const SUMMARY_ENDPOINT = '/dsh-flowmeter/summary.json';
     /** 画多少根柱子：24 × 400ms ≈ 9.6 秒。 */
     const BAR_COUNT = 24;
     /** 柱状图高度（像素）。 */
@@ -35,6 +37,13 @@ window.__ModuleLoader__.load({
       avg: '均速',
       stepTokens: '本步 {count} tok',
       wallBasis: '整步计速',
+      totalTag: '合计',
+      modeSum: '累加',
+      modeAvg: '平均',
+      modeGroup: '统计口径',
+      activeSessions: '{count} 个会话',
+      settingsTotal: '侧栏口径',
+      settingsTotalHint: '侧栏读数取所有会话相加，还是按会话取平均',
       settingsColour: '配色',
       settingsColourHint: '数字、图表与标签统一用这个颜色',
       settingsChart: '图表',
@@ -57,6 +66,13 @@ window.__ModuleLoader__.load({
       avg: 'Avg',
       stepTokens: 'This step {count} tok',
       wallBasis: 'whole-step timing',
+      totalTag: 'Total',
+      modeSum: 'Sum',
+      modeAvg: 'Avg',
+      modeGroup: 'Aggregation',
+      activeSessions: '{count} sessions',
+      settingsTotal: 'Sidebar total',
+      settingsTotalHint: 'Whether the sidebar meter adds every session together or averages per session',
       settingsColour: 'Colour',
       settingsColourHint: 'One colour for the numbers, chart and labels',
       settingsChart: 'Chart',
@@ -85,6 +101,8 @@ window.__ModuleLoader__.load({
     ];
     /** 图表画法。 */
     const CHART_KINDS = ['bars', 'curve'];
+    /** 侧栏合计口径：所有会话相加，或按会话取平均。 */
+    const TOTAL_MODES = ['sum', 'avg'];
     /** 显示偏好存本地：纯展示项，不写 profile、不重启插件。 */
     const SETTINGS_KEY = 'dsh-flowmeter:settings';
 
@@ -93,7 +111,7 @@ window.__ModuleLoader__.load({
 
     /** 读回本地偏好，任何异常都退回默认值。 */
     function readSettings() {
-      const fallback = { color: '', chart: 'bars' };
+      const fallback = { color: '', chart: 'bars', total: 'sum' };
       try {
         const raw = window.localStorage.getItem(SETTINGS_KEY);
         if (typeof raw !== 'string' || raw.length === 0) return fallback;
@@ -101,6 +119,7 @@ window.__ModuleLoader__.load({
         return {
           color: typeof parsed?.color === 'string' ? parsed.color : '',
           chart: CHART_KINDS.includes(parsed?.chart) ? parsed.chart : 'bars',
+          total: TOTAL_MODES.includes(parsed?.total) ? parsed.total : 'sum',
         };
       } catch (err) {
         return fallback;
@@ -147,6 +166,28 @@ window.__ModuleLoader__.load({
       '.dshfm-unit{margin-left:3px;opacity:.8}',
       '.dshfm-sep{opacity:.35;margin:0 1px}',
       '.dshfm-rest{opacity:.7}',
+      // 侧栏底部那张卡：两行 —— 第一行读数 + 口径切换，第二行整宽图表。
+      // 席位行（sidebar.footer.action）是 flex；卡片自己占满一行。
+      // `order` 比 OpenCode Go 额度卡（-100）更小，于是排在它上面一行。
+      // slot 锚点是 display:contents，卡片因此是席位行的直接子项，:has 选择器才匹配得到。
+      ':has(> [data-slot="sidebar.footer.action"] > .dshfm-quota){flex-wrap:wrap}',
+      '.dshfm-quota{box-sizing:border-box;flex:0 0 100%;width:100%;min-width:0;order:-200;margin:2px 0 6px;padding:6px 9px;border:1px solid var(--dsw-alias-border-l1);border-radius:9px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:11.5px;line-height:1.3;display:flex;flex-direction:column;gap:5px;user-select:none}',
+      '.dshfm-quota-head{display:flex;align-items:center;gap:6px;min-width:0}',
+      '.dshfm-dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-label-secondary);opacity:.5}',
+      '.dshfm-dot-live{background:var(--dshfm-accent,var(--dsw-alias-brand-primary,#3d6df6));opacity:1}',
+      '.dshfm-quota-label{flex:0 0 auto;color:var(--dsw-alias-label-secondary);white-space:nowrap}',
+      '.dshfm-quota-value{flex:0 0 auto;color:var(--dshfm-accent,var(--dsw-alias-brand-primary,#3d6df6));font-size:13px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums}',
+      '.dshfm-quota-unit{flex:0 0 auto;color:var(--dsw-alias-label-secondary);white-space:nowrap}',
+      '.dshfm-quota-seg{display:inline-flex;flex:0 0 auto;gap:1px;margin-left:auto;padding:1px;border:.5px solid var(--dsw-alias-border-l1);border-radius:5px}',
+      '.dshfm-quota-segbtn{appearance:none;border:0;border-radius:4px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:10.5px;line-height:15px;padding:0 6px;cursor:pointer}',
+      '.dshfm-quota-segbtn[aria-pressed="true"]{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
+      // currentColor 让柱子/曲线统一走卡片强调色。
+      '.dshfm-quota-chart{width:100%;height:20px;min-width:0;display:flex;align-items:flex-end;color:var(--dshfm-accent,var(--dsw-alias-brand-primary,#3d6df6))}',
+      '.dshfm-quota-chart .dshfm-chart{width:100%;height:20px}',
+      // 折叠成 56px 窄栏时只剩一个 36px 的圆：放不下卡片，但读数还在。
+      '.dshfm-rail{box-sizing:border-box;flex:none;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--dsw-alias-brand-primary,#3d6df6);font:inherit;font-variant-numeric:tabular-nums;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}',
+      '.dshfm-rail:hover{background:var(--dsw-alias-bg-layer-2)}',
+      '.dshfm-rail-num{font-size:10px;font-weight:600;font-variant-numeric:tabular-nums}',
       '@media (prefers-reduced-motion: reduce){.dshfm-bar{transition:none}}',
       '.dshfmf-root{display:flex;flex-direction:column}',
       '.dshfmf-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 0}',
@@ -166,19 +207,23 @@ window.__ModuleLoader__.load({
       '.dshfmf-segbtn[aria-pressed="true"]{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
     ].join('');
 
+    /** 有没有东西正在解码：决定轮询快慢。`busy` 是侧栏合计端点的字段。 */
+    function isBusyState(data) {
+      if (data === null || typeof data !== 'object') return false;
+      if (data.busy === true) return true;
+      return data.phase === 'waiting' || data.phase === 'streaming';
+    }
+
     /**
-     * 轮询 Host 读数。相位自适应，页面不可见时退到慢速；失败保留上一帧，不闪。
-     * @param {string|undefined} sessionId - 当前会话 id。
+     * 轮询一个只读端点。忙碌时快、空闲时慢，页面不可见时退到慢速；失败保留上一帧，不闪。
+     * @param {string} url - 同源端点（可带查询串）。
      * @returns {object|null} 最近一次读数。
      */
-    function useLiveState(sessionId) {
+    function usePolling(url) {
       const [state, setState] = useState(null);
       useEffect(() => {
         let alive = true;
         let timer = 0;
-        const busyOf = (data) =>
-          data !== null && typeof data === 'object' &&
-          (data.phase === 'waiting' || data.phase === 'streaming');
         const schedule = (delay) => {
           if (!alive) return;
           timer = setTimeout(tick, delay);
@@ -188,15 +233,12 @@ window.__ModuleLoader__.load({
             schedule(SLOW_POLL_MS);
             return;
           }
-          const query = sessionId === undefined || sessionId === null
-            ? ''
-            : '?session=' + encodeURIComponent(String(sessionId));
-          fetch(ENDPOINT + query, { cache: 'no-store', headers: { accept: 'application/json' } })
+          fetch(url, { cache: 'no-store', headers: { accept: 'application/json' } })
             .then((response) => (response.ok ? response.json() : null))
             .then((data) => {
               if (!alive) return;
               if (data !== null && typeof data === 'object') setState(data);
-              schedule(busyOf(data) ? FAST_POLL_MS : SLOW_POLL_MS);
+              schedule(isBusyState(data) ? FAST_POLL_MS : SLOW_POLL_MS);
             })
             .catch(() => {
               schedule(SLOW_POLL_MS);
@@ -207,8 +249,25 @@ window.__ModuleLoader__.load({
           alive = false;
           clearTimeout(timer);
         };
-      }, [sessionId]);
+      }, [url]);
       return state;
+    }
+
+    /**
+     * 当前会话的读数（输入框脚下那枚）。
+     * @param {string|undefined} sessionId - 当前会话 id。
+     * @returns {object|null} 最近一次读数。
+     */
+    function useLiveState(sessionId) {
+      const query = sessionId === undefined || sessionId === null
+        ? ''
+        : '?session=' + encodeURIComponent(String(sessionId));
+      return usePolling(ENDPOINT + query);
+    }
+
+    /** 全库读数（侧栏底部那枚）。 */
+    function useSummary() {
+      return usePolling(SUMMARY_ENDPOINT);
     }
 
     /** 速度读数的显示精度：个位数留一位小数，两位数以上取整。 */
@@ -227,13 +286,12 @@ window.__ModuleLoader__.load({
 
     /**
      * 曲线图：同一组分桶连成折线，下面垫一层同色面积，越新越靠右。
-     * @param {{ values: number[], peak: number }} props - 桶速度与归一化峰值。
+     * @param {{ values: number[], peak: number, width?: number, height?: number }} props
+     *   桶速度、归一化峰值，以及可选的画布尺寸（侧栏卡片比输入框那枚宽）。
      */
-    function SpeedCurve({ values, peak }) {
+    function SpeedCurve({ values, peak, width = 60, height = BAR_HEIGHT }) {
       const count = values.length;
       if (count === 0) return null;
-      const width = 60;
-      const height = BAR_HEIGHT;
       const inner = height - 1.5;
       const step = count > 1 ? width / (count - 1) : width;
       let line = '';
@@ -265,15 +323,16 @@ window.__ModuleLoader__.load({
 
     /**
      * 读数里的小图：柱状图或曲线图，数据、分桶、归一化完全一致，只有画法不同。
-     * 放在整行最前面，作为读数的"起手"。
-     * @param {{ values: number[], peak: number, kind: string }} props - 桶速度、归一化峰值与画法。
+     * 不传尺寸时按输入框脚下那枚的 60×14 画；侧栏卡片传更宽更高的尺寸。
+     * @param {{ values: number[], peak: number, kind: string, width?: number, height?: number }} props
+     *   桶速度、归一化峰值、画法，以及可选的画布尺寸。
      */
-    function SpeedChart({ values, peak, kind }) {
+    function SpeedChart({ values, peak, kind, width = 60, height = BAR_HEIGHT }) {
       if (kind === 'curve') {
         return h(
           'span',
           { className: 'dshfm-chart', 'aria-hidden': true },
-          h(SpeedCurve, { values, peak }),
+          h(SpeedCurve, { values, peak, width, height }),
         );
       }
       const count = values.length;
@@ -286,7 +345,7 @@ window.__ModuleLoader__.load({
             key: index,
             className: 'dshfm-bar',
             style: {
-              height: Math.max(1.5, ratio * BAR_HEIGHT).toFixed(1) + 'px',
+              height: Math.max(1.5, ratio * height).toFixed(1) + 'px',
               opacity: (0.25 + (0.6 * (index + 1)) / count).toFixed(2),
             },
           });
@@ -390,6 +449,93 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /**
+     * 侧栏底部的全库读数：所有会话的合计（或平均）速度 + 同一套分桶图表。
+     *
+     * 宽栏是一张两行的卡：第一行读数与「累加 / 平均」切换，第二行整宽图表；
+     * 折叠成 56px 窄栏时只剩一个 36px 的圆，显示数字，点一下切换口径。
+     * 卡片 `order` 比 OpenCode Go 那张额度卡更小，因此排在它上面一行。
+     *
+     * @param {{ wide?: boolean, t?: Function }} props - 侧栏注入的栏宽与翻译函数。
+     */
+    function SidebarMeter({ wide, t: translate }) {
+      const t = translator(translate);
+      const display = useSettings();
+      const summary = useSummary();
+      if (summary === null) return null;
+
+      const mode = display.total === 'avg' ? 'avg' : 'sum';
+      const rawBars = mode === 'avg' ? summary.barsAvg : summary.barsSum;
+      const bars = Array.isArray(rawBars) ? rawBars.slice(-BAR_COUNT) : [];
+      const tps = Math.max(0, Number(mode === 'avg' ? summary.avgTps : summary.sumTps) || 0);
+      const peak = Math.max(1, tps, ...bars.map((value) => Number(value) || 0));
+      const busy = summary.busy === true;
+      const active = Number(summary.active) || 0;
+      const modeLabel = t(mode === 'avg' ? 'modeAvg' : 'modeSum');
+      const title = [
+        t('totalTag') + ' ' + formatTps(tps) + ' ' + t('unit'),
+        modeLabel,
+        t('activeSessions', { count: active }),
+      ].join(' · ');
+
+      if (wide === false) {
+        return h(
+          'button',
+          {
+            type: 'button',
+            className: busy ? 'dshfm-rail' : 'dshfm-rail dshfm-rest',
+            title,
+            'aria-label': title,
+            style: display.color ? { color: display.color } : undefined,
+            onClick: () => writeSettings({ total: mode === 'sum' ? 'avg' : 'sum' }),
+          },
+          h('span', { className: 'dshfm-rail-num' }, formatTps(tps)),
+        );
+      }
+
+      return h(
+        'div',
+        {
+          className: busy ? 'dshfm-quota' : 'dshfm-quota dshfm-rest',
+          role: 'group',
+          title,
+          'aria-label': title,
+          // 自定义配色走一个变量：数值、圆点与图表共用同一个强调色。
+          style: display.color ? { '--dshfm-accent': display.color } : undefined,
+        },
+        h(
+          'div',
+          { className: 'dshfm-quota-head' },
+          h('span', { className: 'dshfm-dot' + (busy ? ' dshfm-dot-live' : '') }),
+          h('span', { className: 'dshfm-quota-label' }, mode === 'avg' ? t('modeAvg') : t('totalTag')),
+          h('span', { className: 'dshfm-quota-value' }, formatTps(tps)),
+          h('span', { className: 'dshfm-quota-unit' }, t('unit')),
+          h(
+            'div',
+            { className: 'dshfm-quota-seg', role: 'group', 'aria-label': t('modeGroup') },
+            TOTAL_MODES.map((option) =>
+              h(
+                'button',
+                {
+                  key: option,
+                  type: 'button',
+                  className: 'dshfm-quota-segbtn',
+                  'aria-pressed': mode === option,
+                  onClick: () => writeSettings({ total: option }),
+                },
+                t(option === 'avg' ? 'modeAvg' : 'modeSum'),
+              ),
+            ),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'dshfm-quota-chart' },
+          h(SpeedChart, { values: bars, peak, kind: display.chart, width: 240, height: 20 }),
+        ),
+      );
+    }
+
     /** 一个圆形色块（设置面板用）。 */
     function Swatch({ value, label, selected, onPick }) {
       return h('button', {
@@ -413,8 +559,13 @@ window.__ModuleLoader__.load({
       const t = translator(translate);
       const display = useSettings();
       const chartLabel = t(display.chart === 'curve' ? 'chartCurve' : 'chartBars');
+      const modeLabel = t(display.total === 'avg' ? 'modeAvg' : 'modeSum');
       if (view === 'summary') {
-        return h('span', { className: 'dshfmf-hint' }, t('settingsColour') + ' · ' + chartLabel);
+        return h(
+          'span',
+          { className: 'dshfmf-hint' },
+          t('settingsColour') + ' · ' + chartLabel + ' · ' + modeLabel,
+        );
       }
       return h(
         'div',
@@ -477,6 +628,33 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
+        h(
+          'div',
+          { className: 'dshfmf-row' },
+          h(
+            'div',
+            { className: 'dshfmf-text' },
+            h('span', { className: 'dshfmf-label' }, t('settingsTotal')),
+            h('span', { className: 'dshfmf-hint' }, t('settingsTotalHint')),
+          ),
+          h(
+            'div',
+            { className: 'dshfmf-seg' },
+            TOTAL_MODES.map((mode) =>
+              h(
+                'button',
+                {
+                  key: mode,
+                  type: 'button',
+                  className: 'dshfmf-segbtn',
+                  'aria-pressed': display.total === mode,
+                  onClick: () => writeSettings({ total: mode }),
+                },
+                t(mode === 'avg' ? 'modeAvg' : 'modeSum'),
+              ),
+            ),
+          ),
+        ),
       );
     }
 
@@ -511,6 +689,18 @@ window.__ModuleLoader__.load({
             locale: NS,
           },
           FlowmeterPill,
+        ),
+      );
+      // 侧栏底部：挂在 Settings 旁边的一组动作里。新 id 是新增一格，不会顶掉任何官方控件。
+      ctx.slots.inject('sidebar.footer.action', () =>
+        ctx.slots.register(
+          {
+            name: 'sidebar.footer.action',
+            id: 'dsh-flowmeter-total',
+            order: 50,
+            locale: NS,
+          },
+          SidebarMeter,
         ),
       );
     }

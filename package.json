@@ -1,11 +1,11 @@
 {
   "name": "dsh-flowmeter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Live model output speed (tok/s), a recent-speed bar chart, and time to first token, shown in the composer footer row.",
+  "description": "Live model output speed (tok/s) with a recent-speed chart and time to first token in the composer footer, plus an all-sessions total/average meter in the sidebar foot.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/PilotPhil/dsh-flowmeter.git"
@@ -37,7 +37,8 @@
       "immediately": true,
       "inject": [
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-conversation"
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-sidebar"
       ]
     }
   },
@@ -48,6 +49,7 @@
     "tps",
     "ttft",
     "throughput",
+    "sidebar",
     "composer"
   ],
   "license": "MIT"

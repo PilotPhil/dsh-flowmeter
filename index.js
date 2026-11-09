@@ -16,9 +16,11 @@
  * 为什么用 HTTP 轮询
  * ------------------
  * Client 半是个普通 slot 组件，拿不到 Host 的进程内事件；本插件用 `ctx.webServer`
- * 注册一个只读的 exact 路由，页面同源轮询它。数据量小（< 2 KB/次），忙碌时 500ms
- * 一次、空闲时 2.5s 一次。只读观测：不注册投影、不写会话日志、不改模型请求，
- * 卸载即净。
+ * 注册两个只读的 exact 路由，页面同源轮询它们：
+ * - `/dsh-flowmeter/state.json`：单个会话的读数（输入框下方那枚）。
+ * - `/dsh-flowmeter/summary.json`：所有会话的合计/平均读数（侧栏底部那枚）。
+ * 数据量小（< 2 KB/次），忙碌时 500ms 一次、空闲时 2.5s 一次。只读观测：不注册
+ * 投影、不写会话日志、不改模型请求，卸载即净。
  */
 
 /** Cordis 插件名，同时是 loader 条目 id。 */
@@ -29,6 +31,8 @@ export const inject = ['webServer']
 
 /** 读数端点：页面同源轮询。 */
 const ROUTE = '/dsh-flowmeter/state.json'
+/** 全库读数端点：侧栏底部那枚「所有会话合计/平均」。 */
+const SUMMARY_ROUTE = '/dsh-flowmeter/summary.json'
 
 /** 实时速度的滑动窗口长度（毫秒）。太长则反应迟钝，太短则读数跳。 */
 const WINDOW_MS = 1200
@@ -212,7 +216,8 @@ function avgTpsOf(tr, phase, now) {
  *
  * 最新那个桶按「已经过掉的时长」折算，而不是整桶时长：否则右边的柱子永远只有
  * 真实的四成，看起来像速度突然掉下去。
- */function barsOf(tr, now) {
+ */
+function barsOf(tr, now) {
   const newest = bucketStart(now)
   const out = new Array(BUCKET_COUNT).fill(0)
   for (const bucket of tr.buckets) {
@@ -407,6 +412,76 @@ function stateOf(sessionId, now) {
 }
 
 /**
+ * 全库读数：把当前所有会话的流速合成一个「合计」与一个「平均」。
+ *
+ * - **累加**：所有正在等首字/出字的会话的实时速度之和，等于这台机器此刻的总吞吐。
+ * - **平均**：合计 ÷ 正在出字的会话数，等于「平均每个会话跑多快」。等首字、还没吐字的
+ *   会话不进分母 —— 否则刚开始的一步会把平均值无故拉低。
+ *
+ * 图表也分两套：每个桶先按会话把 token 相加得到合计 tps；平均则再除以**该桶里真有
+ * token 的会话数**，这样某个会话停下来时，平均值不会因为分母变小而突然跳高。
+ *
+ * 只在最近几个桶里扫一遍追踪器：更早的桶已经落在图表窗口外，算了也没人看。
+ *
+ * @param {number} now - 当前时间戳。
+ * @returns {object} 侧栏控件需要的合计读数。
+ */
+function aggregateOf(now) {
+  const active = []
+  for (const tr of trackers.values()) {
+    if (now - tr.updatedAt > IDLE_MS) continue
+    if (tr.phase !== 'waiting' && tr.phase !== 'streaming') continue
+    active.push(windowTps(tr, now))
+  }
+  let sum = 0
+  let streaming = 0
+  for (const tps of active) {
+    sum += tps
+    if (tps > 0) streaming += 1
+  }
+
+  const newest = bucketStart(now)
+  const historyFrom = newest - (BUCKET_COUNT - 1) * BUCKET_MS
+  const sums = new Array(BUCKET_COUNT).fill(0)
+  const counts = new Array(BUCKET_COUNT).fill(0)
+  for (const tr of trackers.values()) {
+    if (tr.updatedAt < historyFrom) continue
+    for (const bucket of tr.buckets) {
+      const index = BUCKET_COUNT - 1 - Math.round((newest - bucket.t) / BUCKET_MS)
+      if (index < 0 || index >= BUCKET_COUNT) continue
+      sums[index] += bucket.n
+      if (bucket.n > 0) counts[index] += 1
+    }
+  }
+
+  const barsSum = new Array(BUCKET_COUNT)
+  const barsAvg = new Array(BUCKET_COUNT)
+  for (let index = 0; index < BUCKET_COUNT; index += 1) {
+    const startedAt = newest - (BUCKET_COUNT - 1 - index) * BUCKET_MS
+    // 与 barsOf 同一口径：最新那个桶按已经过掉的时长折算，不按整桶。
+    const span = Math.min(BUCKET_MS, Math.max(BUCKET_MS / 2, now - startedAt))
+    const bucketTps = sums[index] / (span / 1000)
+    barsSum[index] = round1(bucketTps)
+    barsAvg[index] = round1(bucketTps / Math.max(1, counts[index]))
+  }
+
+  return {
+    ok: true,
+    now,
+    /** 正在等首字或出字的会话数。 */
+    active: active.length,
+    /** 其中窗口里真有 token 的会话数（平均值的分母）。 */
+    streaming,
+    /** 侧栏据此决定轮询快慢。 */
+    busy: active.length > 0,
+    sumTps: round1(sum),
+    avgTps: streaming > 0 ? round1(sum / streaming) : 0,
+    barsSum,
+    barsAvg,
+  }
+}
+
+/**
  * 挂载插件：接串流与落盘事件 → 每会话有界读数 → 只读 HTTP 端点。
  * @param {object} ctx - 宿主 cordis 上下文。
  */
@@ -448,22 +523,47 @@ export function apply(ctx) {
     }
   })
 
-  ctx.effect(() =>
-    ctx.webServer.register({
-      kind: 'exact',
-      path: ROUTE,
-      handler: (req, res) => {
-        const now = Date.now()
-        let body
+  // 两个只读端点：输入框脚下那枚看单会话，侧栏底部那枚看全库。
+  ctx.effect(() => {
+    const disposers = [
+      ctx.webServer.register({
+        kind: 'exact',
+        path: ROUTE,
+        handler: (req, res) => {
+          const now = Date.now()
+          let body
+          try {
+            const query = new URL(req.url ?? '/', 'http://localhost').searchParams.get('session')
+            body = stateOf(query, now)
+          } catch (err) {
+            body = { ok: false, now, error: 'unreadable request' }
+          }
+          res.writeHead(200, JSON_HEADERS)
+          res.end(JSON.stringify(body))
+        },
+      }),
+      ctx.webServer.register({
+        kind: 'exact',
+        path: SUMMARY_ROUTE,
+        handler: (req, res) => {
+          let body
+          try {
+            body = aggregateOf(Date.now())
+          } catch (err) {
+            body = { ok: false, now: Date.now(), error: 'unreadable request' }
+          }
+          res.writeHead(200, JSON_HEADERS)
+          res.end(JSON.stringify(body))
+        },
+      }),
+    ]
+    return () => {
+      for (const dispose of disposers) {
+        if (typeof dispose !== 'function') continue
         try {
-          const query = new URL(req.url ?? '/', 'http://localhost').searchParams.get('session')
-          body = stateOf(query, now)
-        } catch (err) {
-          body = { ok: false, now, error: 'unreadable request' }
-        }
-        res.writeHead(200, JSON_HEADERS)
-        res.end(JSON.stringify(body))
-      },
-    }),
-  )
+          dispose()
+        } catch (err) {}
+      }
+    }
+  })
 }
