@@ -1,5 +1,8 @@
 # dsh-flowmeter · 模型流速
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![DSH](https://img.shields.io/badge/DSH-0.2.2--rc.1-4d6bfe)
+
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 输入框下方加一枚读数：**实时输出速度 · 速度图表 · 首字延迟 · 本步均速**。
 
 > A TPS/TTFT readout for the DeepSeek Harness composer footer: live tokens-per-second, a speed chart, time-to-first-token, and the per-step average decode speed. Pure JavaScript, no build step, no runtime dependencies.
@@ -40,7 +43,7 @@
 ### 方式一：从 GitHub 安装（推荐，可锁 commit）
 
 ```sh
-dsh plugin --profile <profile> add "github:<你的用户名>/dsh-flowmeter#<commit-sha>"
+dsh plugin --profile <profile> add "github:PilotPhil/dsh-flowmeter#<commit-sha>"
 ```
 
 > `--profile` 填你的 profile 名（桌面版通常是 `desktop`）。PowerShell 里 `#` 是注释符，**参数要带引号**，否则 SHA 会被吞掉。

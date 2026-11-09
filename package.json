@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "description": "Live model output speed (tok/s), a recent-speed bar chart, and time to first token, shown in the composer footer row.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PilotPhil/dsh-flowmeter.git"
+  },
+  "homepage": "https://github.com/PilotPhil/dsh-flowmeter#readme",
+  "bugs": {
+    "url": "https://github.com/PilotPhil/dsh-flowmeter/issues"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
