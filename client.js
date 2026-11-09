@@ -182,14 +182,17 @@ window.__ModuleLoader__.load({
       // slot 锚点是 display:contents，卡片因此是席位行的直接子项，:has 选择器才匹配得到。
       ':has(> [data-slot="sidebar.footer.action"] > .dshfm-quota){flex-wrap:wrap}',
       '.dshfm-quota{box-sizing:border-box;flex:0 0 100%;width:100%;min-width:0;order:-200;margin:2px 0 6px;padding:6px 9px;border:1px solid var(--dsw-alias-border-l1);border-radius:9px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:11.5px;line-height:1.3;display:flex;flex-direction:column;gap:5px;user-select:none}',
-      '.dshfm-quota-head{display:flex;align-items:center;gap:6px;min-width:0}',
+      '.dshfm-quota-head{display:flex;align-items:center;gap:5px;min-width:0}',
       '.dshfm-dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-label-secondary);opacity:.5}',
       '.dshfm-dot-live{background:var(--dshfm-accent,var(--dsw-alias-brand-primary,#3d6df6));opacity:1}',
       '.dshfm-quota-label{flex:0 0 auto;color:var(--dsw-alias-label-secondary);white-space:nowrap}',
       '.dshfm-quota-value{flex:0 0 auto;color:var(--dshfm-accent,var(--dsw-alias-brand-primary,#3d6df6));font-size:13px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums}',
       '.dshfm-quota-unit{flex:0 0 auto;color:var(--dsw-alias-label-secondary);white-space:nowrap}',
+      '.dshfm-quota-sep{flex:0 0 auto;opacity:.35}',
+      // 活跃会话数：宽度不够时先在这里省略，口径切换保持可见。
+      '.dshfm-quota-sessions{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary);font-size:10.5px;font-variant-numeric:tabular-nums}',
       '.dshfm-quota-seg{display:inline-flex;flex:0 0 auto;gap:1px;margin-left:auto;padding:1px;border:.5px solid var(--dsw-alias-border-l1);border-radius:5px}',
-      '.dshfm-quota-segbtn{appearance:none;border:0;border-radius:4px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:10.5px;line-height:15px;padding:0 6px;cursor:pointer}',
+      '.dshfm-quota-segbtn{appearance:none;border:0;border-radius:4px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:10.5px;line-height:15px;padding:0 5px;cursor:pointer}',
       '.dshfm-quota-segbtn[aria-pressed="true"]{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
       // currentColor 让曲线/面积统一走卡片强调色。
       '.dshfm-quota-chart{width:100%;min-width:0;color:var(--dshfm-accent,var(--dsw-alias-brand-primary,#3d6df6))}',
@@ -635,6 +638,12 @@ window.__ModuleLoader__.load({
           h('span', { className: 'dshfm-quota-label' }, mode === 'avg' ? t('modeAvg') : t('totalTag')),
           h('span', { className: 'dshfm-quota-value' }, formatTps(tps)),
           h('span', { className: 'dshfm-quota-unit' }, t('unit')),
+          h('span', { className: 'dshfm-quota-sep', 'aria-hidden': true }, '·'),
+          h(
+            'span',
+            { className: 'dshfm-quota-sessions' },
+            t('activeSessions', { count: active }),
+          ),
           h(
             'div',
             { className: 'dshfm-quota-seg', role: 'group', 'aria-label': t('modeGroup') },
