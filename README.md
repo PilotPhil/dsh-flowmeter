@@ -1,5 +1,6 @@
 # dsh-flowmeter · 模型流速
 
+[![npm](https://img.shields.io/npm/v/dsh-flowmeter.svg)](https://www.npmjs.com/package/dsh-flowmeter)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![DSH](https://img.shields.io/badge/DSH-0.2.2--rc.1-4d6bfe)
 
@@ -40,7 +41,15 @@
 
 前置：DeepSeek Harness `0.2.2-rc.1` 及以上（桌面版或 `dsh web` 均可）。纯 JS、无构建、无运行时依赖，装完即用。
 
-### 方式一：从 GitHub 安装（推荐，可锁 commit）
+### 方式一：按包名安装（最简单）
+
+```sh
+dsh plugin --profile <profile> add dsh-flowmeter
+```
+
+或者完全不碰命令行：侧栏「插件」→「添加插件」→ 输入 `dsh-flowmeter` → 安装。
+
+### 方式二：从 GitHub 安装（可锁 commit）
 
 ```sh
 dsh plugin --profile <profile> add "github:PilotPhil/dsh-flowmeter#<commit-sha>"
@@ -50,24 +59,26 @@ dsh plugin --profile <profile> add "github:PilotPhil/dsh-flowmeter#<commit-sha>"
 >
 > 锁完整 commit SHA 而不是分支名：以后上游推送不会悄悄改掉你装的东西。
 
-装完重启 DSH 即可。这条命令会把包装进 profile，并**自动**把 `dsh-flowmeter` 加进该 profile `package.json` 的 `dsh.profile.bundles`（装完的清单长这样）：
-
-```json
-{
-  "dependencies": { "dsh-flowmeter": "git+https://github.com/PilotPhil/dsh-flowmeter.git#bce1713" },
-  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "dsh-flowmeter"] } }
-}
-```
-
-如果「插件」页里已经能看到 **模型流速**、但输入框下方没有读数，按一次 F5 刷新页面（客户端模块要重新加载）。
-
-### 方式二：本地目录安装
+### 方式三：本地目录安装
 
 ```sh
 dsh plugin --profile <profile> add "C:\path\to\dsh-flowmeter"
 ```
 
 pnpm 会建一个 `link:` 依赖，源码改了立刻生效，适合自己改着玩。也可以直接在「插件」页用「添加」选中这个目录。
+
+### 装完要做的
+
+重启 DSH。三种方式都会把包装进 profile，并**自动**把 `dsh-flowmeter` 写进该 profile `package.json` 的 `dsh.profile.bundles`（以 npm 安装为例）：
+
+```json
+{
+  "dependencies": { "dsh-flowmeter": "^1.0.0" },
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "dsh-flowmeter"] } }
+}
+```
+
+如果「插件」页里已经能看到 **模型流速**、但输入框下方没有读数，按一次 F5 刷新页面（客户端模块要重新加载）。
 
 ### 验证装好了
 
