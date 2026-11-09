@@ -4,8 +4,12 @@
 
 > A TPS/TTFT readout for the DeepSeek Harness composer footer: live tokens-per-second, a speed chart, time-to-first-token, and the per-step average decode speed. Pure JavaScript, no build step, no runtime dependencies.
 
+![输入框下方的读数：速度图表 · 实时 · 首字 · 均速](docs/screenshot.png)
+
+*柱状图模式，右边依次是官方的「缓存命中」与上下文占用。同一份数据也可以在设置里画成曲线。*
+
 ```
-▁▂▄▆▇▅▃▂  实时 154.6 tok/s  ·  首字 3.78s  ·  均速 172 tok/s
+▁▂▄▆▇▅▃▂  实时 131 tok/s  ·  首字 5.81s  ·  均速 134 tok/s
 ```
 
 它接管的是官方那枚「输出速度」统计格（`activity`，同 id + 更低 `priority`），所以读数排在整行最前面，官方那枚**整步平均速度不再重复显示**；「缓存命中」与上下文占用两枚保持原样。
@@ -115,6 +119,8 @@ dsh-flowmeter/
 ├── package.json        # 包清单（dsh.bundle.patch、dsh.client）
 ├── icon.svg            # 插件页封面
 ├── locale/{zh,en}.json # 插件页标题与描述
+├── docs/screenshot.png # 效果图
+├── LICENSE
 └── README.md
 ```
 
