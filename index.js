@@ -38,10 +38,15 @@ const SUMMARY_ROUTE = '/dsh-flowmeter/summary.json'
 const WINDOW_MS = 1200
 /** 窗口分母下限：窗口还没铺满时用它，避免一两个分片把读数顶到天上。 */
 const MIN_SPAN_MS = 250
-/** 柱状图每个桶的宽度（毫秒）。 */
+/** 分桶每个桶的宽度（毫秒）。 */
 const BUCKET_MS = 400
-/** 柱状图保留的桶数：32 × 400ms ≈ 12.8 秒。 */
-const BUCKET_COUNT = 32
+/**
+ * 保留的桶数：120 × 400ms = 48 秒。
+ *
+ * 输入框那枚只取最近 24 桶（9.6 秒），侧栏合计可选 10 / 20 / 40 秒，
+ * 所以这里按最长的 40 秒再加一点余量来留历史。
+ */
+const BUCKET_COUNT = 120
 /** 单会话保留的原始时间样本上限（同毫秒分片会合并）。 */
 const MAX_SAMPLES = 2000
 /** 超过该时长没有分片就当作空闲。 */

@@ -26,6 +26,11 @@ window.__ModuleLoader__.load({
     const BAR_COUNT = 24;
     /** 柱状图高度（像素）。 */
     const BAR_HEIGHT = 14;
+    /** Host 每个分桶的宽度（毫秒），侧栏时窗按它换算成桶数。 */
+    const TREND_BUCKET_MS = 400;
+    /** 侧栏曲线可选的时间跨度（秒）：默认 20 秒，约为输入框那枚的 2 倍。 */
+    const TREND_SPANS = [10, 20, 40];
+    const TREND_SPAN_DEFAULT = 20;
     /** 忙碌/空闲的轮询间隔。 */
     const FAST_POLL_MS = 500;
     const SLOW_POLL_MS = 2500;
@@ -44,6 +49,8 @@ window.__ModuleLoader__.load({
       activeSessions: '{count} 个会话',
       settingsTotal: '侧栏口径',
       settingsTotalHint: '侧栏读数取所有会话相加，还是按会话取平均',
+      settingsSpan: '侧栏时窗',
+      settingsSpanHint: '侧栏曲线显示最近多少秒；默认 20 秒',
       settingsColour: '配色',
       settingsColourHint: '数字、图表与标签统一用这个颜色',
       settingsChart: '图表',
@@ -73,6 +80,8 @@ window.__ModuleLoader__.load({
       activeSessions: '{count} sessions',
       settingsTotal: 'Sidebar total',
       settingsTotalHint: 'Whether the sidebar meter adds every session together or averages per session',
+      settingsSpan: 'Sidebar span',
+      settingsSpanHint: 'How many seconds the sidebar curve shows; 20 seconds by default',
       settingsColour: 'Colour',
       settingsColourHint: 'One colour for the numbers, chart and labels',
       settingsChart: 'Chart',
@@ -111,7 +120,7 @@ window.__ModuleLoader__.load({
 
     /** 读回本地偏好，任何异常都退回默认值。 */
     function readSettings() {
-      const fallback = { color: '', chart: 'bars', total: 'sum' };
+      const fallback = { color: '', chart: 'bars', total: 'sum', span: TREND_SPAN_DEFAULT };
       try {
         const raw = window.localStorage.getItem(SETTINGS_KEY);
         if (typeof raw !== 'string' || raw.length === 0) return fallback;
@@ -120,6 +129,7 @@ window.__ModuleLoader__.load({
           color: typeof parsed?.color === 'string' ? parsed.color : '',
           chart: CHART_KINDS.includes(parsed?.chart) ? parsed.chart : 'bars',
           total: TOTAL_MODES.includes(parsed?.total) ? parsed.total : 'sum',
+          span: TREND_SPANS.includes(Number(parsed?.span)) ? Number(parsed.span) : TREND_SPAN_DEFAULT,
         };
       } catch (err) {
         return fallback;
@@ -578,7 +588,10 @@ window.__ModuleLoader__.load({
 
       const mode = display.total === 'avg' ? 'avg' : 'sum';
       const rawBars = mode === 'avg' ? summary.barsAvg : summary.barsSum;
-      const bars = Array.isArray(rawBars) ? rawBars.slice(-BAR_COUNT) : [];
+      // 时窗按 400ms 一桶换算：20 秒 → 50 桶（Host 保留 120 桶历史）。
+      const span = TREND_SPANS.includes(display.span) ? display.span : TREND_SPAN_DEFAULT;
+      const bucketCount = Math.round((span * 1000) / TREND_BUCKET_MS);
+      const bars = Array.isArray(rawBars) ? rawBars.slice(-bucketCount) : [];
       const tps = Math.max(0, Number(mode === 'avg' ? summary.avgTps : summary.sumTps) || 0);
       const peak = Math.max(1, tps, ...bars.map((value) => Number(value) || 0));
       const busy = summary.busy === true;
@@ -672,11 +685,12 @@ window.__ModuleLoader__.load({
       const display = useSettings();
       const chartLabel = t(display.chart === 'curve' ? 'chartCurve' : 'chartBars');
       const modeLabel = t(display.total === 'avg' ? 'modeAvg' : 'modeSum');
+      const spanLabel = display.span + 's';
       if (view === 'summary') {
         return h(
           'span',
           { className: 'dshfmf-hint' },
-          t('settingsColour') + ' · ' + chartLabel + ' · ' + modeLabel,
+          t('settingsColour') + ' · ' + chartLabel + ' · ' + spanLabel + ' · ' + modeLabel,
         );
       }
       return h(
@@ -736,6 +750,33 @@ window.__ModuleLoader__.load({
                   onClick: () => writeSettings({ chart: kind }),
                 },
                 t(kind === 'curve' ? 'chartCurve' : 'chartBars'),
+              ),
+            ),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'dshfmf-row' },
+          h(
+            'div',
+            { className: 'dshfmf-text' },
+            h('span', { className: 'dshfmf-label' }, t('settingsSpan')),
+            h('span', { className: 'dshfmf-hint' }, t('settingsSpanHint')),
+          ),
+          h(
+            'div',
+            { className: 'dshfmf-seg' },
+            TREND_SPANS.map((seconds) =>
+              h(
+                'button',
+                {
+                  key: seconds,
+                  type: 'button',
+                  className: 'dshfmf-segbtn',
+                  'aria-pressed': display.span === seconds,
+                  onClick: () => writeSettings({ span: seconds }),
+                },
+                seconds + 's',
               ),
             ),
           ),
